@@ -5,7 +5,7 @@ from metrics.lst import download_modis_lst
 from utils import move_data_from_gcs_to_local
 from metrics.download_aqua import export_modis_aqua_rgb
 
-def pipeline_metrics(download_to_local=True):
+def pipeline_metrics(download_to_local=False):
 
     gcs_paths = []
 
