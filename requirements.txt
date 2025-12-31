@@ -1,0 +1,6 @@
+earthengine-api
+requests
+gee_fwi
+dotenv
+tqdm
+Pillow
