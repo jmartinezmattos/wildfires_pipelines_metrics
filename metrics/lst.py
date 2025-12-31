@@ -26,11 +26,13 @@ def download_modis_lst():
         .sort("system:time_start", False)
     )
 
-    image = ee.Image(collection.first())
+    count = collection.size().getInfo()
 
-    if image is None:
+    if count == 0:
         print("No MODIS LST image found for the period.")
         return None
+
+    image = ee.Image(collection.first())
 
     # --- Extract day LST band and scale ---
     # LST = DN * 0.02  → Kelvin
