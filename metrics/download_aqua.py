@@ -7,7 +7,7 @@ from utils import wait_for_task, uruguay, gee_authenticate
 load_dotenv("./config/.env")
 BUCKET = os.getenv("BUCKET_NAME")
 GEE_PROJECT = os.getenv("GEE_PROJECT")
-CLOUD_ENV = os.getenv("CLOUD_ENV", "1").lower() == "true"
+CLOUD_ENV = os.getenv("CLOUD_ENV", "0").lower() == "1"
 
 gee_authenticate(cloud_env=CLOUD_ENV, gee_project=GEE_PROJECT)
 
