@@ -1,7 +1,6 @@
 import os
 import ee
 import datetime
-import requests
 from dotenv import load_dotenv
 from utils import wait_for_task, uruguay, gee_authenticate
 
@@ -66,5 +65,4 @@ def export_modis_aqua_rgb():
 
 
 if __name__ == "__main__":
-    result = export_modis_aqua_rgb()
-    print("Returned:", result)
+    export_modis_aqua_rgb()
