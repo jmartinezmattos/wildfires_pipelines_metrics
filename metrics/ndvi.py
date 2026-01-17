@@ -26,14 +26,14 @@ def ndvi():
     img = ee.Image(col.first())
 
     ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI")
-    ndvi = ndvi.clip(uruguay)
+
 
     today_str = datetime.datetime.now().strftime('%Y%m%d')
 
     file_name = f'ndvi/NDVI_Uruguay_{today_str}'
 
     task = ee.batch.Export.image.toCloudStorage(
-        image=ndvi,
+        image=ndvi.clip(uruguay),
         description='NDVI_Uruguay_Export',
         bucket=BUCKET,            
         fileNamePrefix=file_name,
@@ -41,6 +41,10 @@ def ndvi():
         scale=500,
         crs='EPSG:4326',
         fileFormat='GeoTIFF',
+        formatOptions= {
+            'cloudOptimized': True,
+            'noData': -100
+        },
         maxPixels=1e13
     )
 
