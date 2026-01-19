@@ -3,3 +3,4 @@ gee_fwi
 dotenv
 tqdm
 Pillow
+mysql-connector-python
