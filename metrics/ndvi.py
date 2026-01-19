@@ -25,6 +25,9 @@ def ndvi():
 
     img = ee.Image(col.first())
 
+    timestamp = img.get("system:time_start").getInfo()  # devuelve en ms desde 1970
+    image_date = datetime.datetime.utcfromtimestamp(timestamp / 1000).strftime("%Y-%m-%d")
+
     ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI")
 
 
@@ -57,7 +60,7 @@ def ndvi():
 
     gcs_path = f"gs://{BUCKET}/{file_name}.tif"
     print("Export completed:", gcs_path)
-    return gcs_path
+    return gcs_path, image_date
 
 if __name__ == "__main__":
     ndvi()

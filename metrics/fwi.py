@@ -56,11 +56,11 @@ def fwi():
     success = wait_for_task(task)
 
     if not success:
-        return None
+        return None, None
 
     gcs_path = f"gs://{BUCKET}/{file_name}.tif"
     print("Export completed:", gcs_path)
-    return gcs_path
+    return gcs_path, obs
 
 if __name__ == "__main__":
     fwi()
