@@ -25,18 +25,20 @@ def ndvi():
 
     img = ee.Image(col.first())
 
-    timestamp = img.get("system:time_start").getInfo()  # devuelve en ms desde 1970
-    image_date = datetime.datetime.utcfromtimestamp(timestamp / 1000).strftime("%Y-%m-%d")
+    ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(
+        uruguay)  # propagate original data mask
+    alpha = ndvi.mask().unmask(0).rename("alpha")
 
-    ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI")
-
+    ndvi = ndvi.toFloat()
+    alpha = alpha.toFloat()
+    out = ndvi.toFloat().addBands(alpha.toFloat())  # add alpha band to NDVI
 
     today_str = datetime.datetime.now().strftime('%Y%m%d')
 
     file_name = f'ndvi/NDVI_Uruguay_{today_str}'
 
     task = ee.batch.Export.image.toCloudStorage(
-        image=ndvi.clip(uruguay),
+        image=out,
         description='NDVI_Uruguay_Export',
         bucket=BUCKET,            
         fileNamePrefix=file_name,
@@ -46,7 +48,6 @@ def ndvi():
         fileFormat='GeoTIFF',
         formatOptions= {
             'cloudOptimized': True,
-            'noData': -100
         },
         maxPixels=1e13
     )
@@ -60,7 +61,7 @@ def ndvi():
 
     gcs_path = f"gs://{BUCKET}/{file_name}.tif"
     print("Export completed:", gcs_path)
-    return gcs_path, image_date
+    return gcs_path
 
 if __name__ == "__main__":
     ndvi()
