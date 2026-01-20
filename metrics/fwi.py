@@ -4,7 +4,7 @@ import datetime
 from gee_fwi.FWI import FWICalculator
 from gee_fwi.FWIInputs import FWI_GFS_GSMAP
 from dotenv import load_dotenv
-from utils import wait_for_task, uruguay, gee_authenticate
+from utils_temp import wait_for_task, uruguay, gee_authenticate
 
 load_dotenv("./config/.env")
 BUCKET = os.getenv("BUCKET_NAME")
@@ -26,7 +26,11 @@ def fwi():
     fwi = calculator.compute()
 
     fwi_uruguay = fwi.clip(uruguay)
+    alpha = fwi_uruguay.mask().unmask(0).rename("alpha")
 
+    fwi_uruguay = fwi_uruguay.toFloat()
+    alpha = alpha.toFloat()
+    out =fwi_uruguay.toFloat().addBands(alpha.toFloat()) # add alpha band to FWI
     # Obtener URL de descarga del GeoTIFF
     # url = fwi_uruguay.getDownloadURL({
     #     'name': 'FWI_Uruguay_' + obs.strftime('%Y%m%d'),
@@ -41,12 +45,15 @@ def fwi():
     task = ee.batch.Export.image.toCloudStorage(
         image=fwi_uruguay,
         description='FWI_Uruguay_Export',
-        bucket=BUCKET,
+        outputBucket=BUCKET,
         fileNamePrefix='fwi/FWI_Uruguay_' + obs.strftime('%Y%m%d'),
         region=uruguay.bounds(),
         scale=1000,
         crs='EPSG:4326',
         fileFormat='GeoTIFF',
+        formatOptions={
+        'cloudOptimized': True,
+        },
         maxPixels=1e13
     )
 
