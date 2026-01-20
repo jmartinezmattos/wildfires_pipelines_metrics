@@ -34,6 +34,11 @@ def download_modis_lst():
 
     image = ee.Image(collection.first())
 
+    timestamp = image.get("system:time_start").getInfo()  # milliseconds since 1970
+    image_date = datetime.datetime.utcfromtimestamp(
+        timestamp / 1000
+    ).strftime("%Y-%m-%d")
+
     # --- Extract day LST band and scale ---
     # LST = DN * 0.02  → Kelvin
     lst_day = image.select("LST_Day_1km").multiply(0.02).rename("LST_Day_K")
@@ -62,11 +67,11 @@ def download_modis_lst():
 
     if not success:
         print("LST export failed.")
-        return None
+        return None, None
 
     gcs_path = f"gs://{BUCKET}/{prefix}.tif"
     print("Export completed:", gcs_path)
-    return gcs_path
+    return gcs_path, image_date
 
 if __name__ == "__main__":
     result = download_modis_lst()

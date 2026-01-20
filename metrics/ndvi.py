@@ -27,15 +27,13 @@ def ndvi():
 
     img = ee.Image(col.first())
 
-    #ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI")
-    #ndvi = ndvi.unmask(-9999) # Fill no-data with -9999
-    #ndvi = ndvi.updateMask(ndvi.mask())
-    ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(uruguay)                        # propagate original data mask
+    ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(
+        uruguay)  # propagate original data mask
     alpha = ndvi.mask().unmask(0).rename("alpha")
 
-    ndvi=ndvi.toFloat()
-    alpha=alpha.toFloat()
-    out = ndvi.toFloat().addBands(alpha.toFloat()) # add alpha band to NDVI
+    ndvi = ndvi.toFloat()
+    alpha = alpha.toFloat()
+    out = ndvi.toFloat().addBands(alpha.toFloat())  # add alpha band to NDVI
 
     today_str = datetime.datetime.now().strftime('%Y%m%d')
 
@@ -45,7 +43,6 @@ def ndvi():
         raise ValueError("BUCKET_NAME environment variable is not set in ./config/.env")
     
     task = ee.batch.Export.image.toCloudStorage(
-        #image=ndvi,
         image=out,
         description='NDVI_Uruguay_Export',
         outputBucket=BUCKET,            
@@ -56,9 +53,8 @@ def ndvi():
         scale=500,
         crs='EPSG:4326',
         fileFormat='GeoTIFF',
-        formatOptions={
-        'cloudOptimized': True,
-        #'noData': -9999
+        formatOptions= {
+            'cloudOptimized': True,
         },
         maxPixels=1e13
     )

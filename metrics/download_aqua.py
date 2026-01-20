@@ -33,11 +33,16 @@ def export_modis_aqua_rgb():
 
     image = ee.Image(collection.first())
 
+    timestamp = image.get("system:time_start").getInfo()
+    image_date = datetime.datetime.utcfromtimestamp(
+        timestamp / 1000
+    ).strftime("%Y-%m-%d")
+
     # Scale reflectance (MODIS scale factor = 0.0001)
     rgb = image.multiply(0.0001).clip(uruguay)
 
     today = datetime.datetime.now().strftime("%Y%m%d")
-    prefix = f"modis_aqua_rgb/MODIS_AQUA_RGB_Uruguay_{today}"
+    prefix = f"rgb/MODIS_AQUA_RGB_Uruguay_{today}"
 
     task = ee.batch.Export.image.toCloudStorage(
         image=rgb,
@@ -57,11 +62,11 @@ def export_modis_aqua_rgb():
     success = wait_for_task(task)
 
     if not success:
-        return None
+        return None, None
 
     gcs_path = f"gs://{BUCKET}/{prefix}.tif"
     print("Export completed:", gcs_path)
-    return gcs_path
+    return gcs_path, image_date
 
 
 if __name__ == "__main__":
