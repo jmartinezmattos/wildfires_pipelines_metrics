@@ -29,11 +29,8 @@ def ndvi():
 
     ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(
         uruguay)  # propagate original data mask
-    alpha = ndvi.mask().unmask(0).rename("alpha")
-
-    ndvi = ndvi.toFloat()
-    alpha = alpha.toFloat()
-    out = ndvi.toFloat().addBands(alpha.toFloat())  # add alpha band to NDVI
+    alpha = ee.Image.constant(1).clip(uruguay).rename('alpha')
+    out = ndvi.toFloat().addBands(alpha.toFloat())  # add alpha band
 
     today_str = datetime.datetime.now().strftime('%Y%m%d')
 

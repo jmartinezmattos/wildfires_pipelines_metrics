@@ -14,8 +14,10 @@ CLOUD_ENV = os.getenv("CLOUD_ENV", "0").lower() == "1"
 gee_authenticate(cloud_env=CLOUD_ENV, gee_project=GEE_PROJECT)
 
 def fwi():
-
-    obs = datetime.date.today() - datetime.timedelta(days=1)
+    today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    obs = yesterday - datetime.timedelta(days=2)
+    # todo REVISAR TEMA DE FECHAS
     timezone = 'America/Montevideo'
 
     bounds = ee.Geometry.BBox(-60, -35, -50, -30)
@@ -26,29 +28,18 @@ def fwi():
     fwi = calculator.compute()
 
     fwi_uruguay = fwi.clip(uruguay)
-    alpha = fwi_uruguay.mask().unmask(0).rename("alpha")
-
-    fwi_uruguay = fwi_uruguay.toFloat()
-    alpha = alpha.toFloat()
-    out =fwi_uruguay.toFloat().addBands(alpha.toFloat()) # add alpha band to FWI
-    # Obtener URL de descarga del GeoTIFF
-    # url = fwi_uruguay.getDownloadURL({
-    #     'name': 'FWI_Uruguay_' + obs.strftime('%Y%m%d'),
-    #     'scale': 1000,           # resolución en metros
-    #     'region': uruguay.geometry().bounds().getInfo(),
-    #     'crs': 'EPSG:4326',
-    #     'fileFormat': 'GeoTIFF'
-    # })
+    alpha = ee.Image.constant(1).clip(uruguay).rename('alpha')
+    out = fwi_uruguay.toFloat().addBands(alpha.toFloat())  # add alpha band
 
     file_name = 'fwi/FWI_Uruguay_' + obs.strftime('%Y%m%d')
 
     task = ee.batch.Export.image.toCloudStorage(
-        image=fwi_uruguay,
+        image=out,
         description='FWI_Uruguay_Export',
         outputBucket=BUCKET,
         fileNamePrefix='fwi/FWI_Uruguay_' + obs.strftime('%Y%m%d'),
         region=uruguay.bounds(),
-        scale=1000,
+        scale=500,
         crs='EPSG:4326',
         fileFormat='GeoTIFF',
         formatOptions={
