@@ -2,10 +2,9 @@ import os
 import ee
 import datetime
 from dotenv import load_dotenv
-from utils_temp import wait_for_task, uruguay, gee_authenticate
+from utils import wait_for_task, uruguay, gee_authenticate
 
-#load_dotenv("./config/.env")
-load_dotenv("../config/.env")
+load_dotenv("./config/.env")
 BUCKET = os.getenv("BUCKET_NAME")
 GEE_PROJECT = os.getenv("GEE_PROJECT")
 CLOUD_ENV = os.getenv("CLOUD_ENV", "0").lower() == "1"

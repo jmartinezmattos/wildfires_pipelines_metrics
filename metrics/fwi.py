@@ -4,9 +4,9 @@ import datetime
 from gee_fwi.FWI import FWICalculator
 from gee_fwi.FWIInputs import FWI_GFS_GSMAP
 from dotenv import load_dotenv
-from utils_temp import wait_for_task, uruguay, gee_authenticate
+from utils import wait_for_task, uruguay, gee_authenticate
 
-load_dotenv("../config/.env")
+load_dotenv("./config/.env")
 BUCKET = os.getenv("BUCKET_NAME")
 GEE_PROJECT = os.getenv("GEE_PROJECT")
 CLOUD_ENV = os.getenv("CLOUD_ENV", "0").lower() == "1"
@@ -16,7 +16,9 @@ gee_authenticate(cloud_env=CLOUD_ENV, gee_project=GEE_PROJECT)
 def fwi():
     today = datetime.date.today()
     yesterday = today - datetime.timedelta(days=1)
-    obs = yesterday - datetime.timedelta(days=2)
+    #obs = yesterday - datetime.timedelta(days=2)
+    dfyesterday = today - datetime.timedelta(days=2)
+    obs = dfyesterday
     # todo REVISAR TEMA DE FECHAS
     timezone = 'America/Montevideo'
 
