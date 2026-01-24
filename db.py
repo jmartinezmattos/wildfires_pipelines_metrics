@@ -29,7 +29,7 @@ class wildfiresDB:
                 "user": DB_CONFIG.get("user"),
                 "password": DB_CONFIG.get("password"),
                 "database": DB_CONFIG.get("database"),
-                "unix_socket": f"/cloudsql/{DB_CONFIG.get("connection_name")}",
+                "unix_socket": f"/cloudsql/{DB_CONFIG.get('connection_name')}",
             }
         else:
             self.db_config = {

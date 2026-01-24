@@ -40,12 +40,13 @@ def export_modis_aqua_rgb():
 
     # Scale reflectance (MODIS scale factor = 0.0001)
     rgb = image.multiply(0.0001).clip(uruguay)
-
+    alpha = ee.Image.constant(1).clip(uruguay).rename("alpha")
+    out = rgb.toFloat().addBands(alpha.toFloat())  # add alpha band
     today = datetime.datetime.now().strftime("%Y%m%d")
     prefix = f"rgb/MODIS_AQUA_RGB_Uruguay_{today}"
 
     task = ee.batch.Export.image.toCloudStorage(
-        image=rgb,
+        image=out,
         description="MODIS_AQUA_RGB_Uruguay",
         bucket=BUCKET,
         fileNamePrefix=prefix,

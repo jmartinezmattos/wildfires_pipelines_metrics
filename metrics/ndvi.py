@@ -60,11 +60,12 @@ def ndvi():
     success = wait_for_task(task)
 
     if not success:
-        return None
+        return None, None
 
     gcs_path = f"gs://{BUCKET}/{file_name}.tif"
     print("Export completed:", gcs_path)
-    return gcs_path
+    ndvi_date = datetime.datetime.strptime(today_str, '%Y%m%d').date()
+    return gcs_path, ndvi_date
 
 if __name__ == "__main__":
     ndvi()
