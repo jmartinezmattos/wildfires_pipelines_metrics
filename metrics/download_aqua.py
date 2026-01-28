@@ -54,6 +54,9 @@ def export_modis_aqua_rgb():
         scale=500,
         crs="EPSG:4326",
         fileFormat="GeoTIFF",
+        formatOptions={
+            'cloudOptimized': True,
+        },
         maxPixels=1e13
     )
 
