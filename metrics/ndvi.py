@@ -11,61 +11,96 @@ CLOUD_ENV = os.getenv("CLOUD_ENV", "0").lower() == "1"
 
 gee_authenticate(cloud_env=CLOUD_ENV, gee_project=GEE_PROJECT)
 
-def ndvi():
+def _process_and_export_ndvi(target_date):
+    """
+    Función interna para validar la existencia de datos, calcular NDVI y exportar.
+    """
+    start_str = str(target_date)
+    end_str = str(target_date + datetime.timedelta(days=1))
 
-    end = datetime.date.today()
-    start = end - datetime.timedelta(days=7)
-    start2 = end - datetime.timedelta(days=14)
-
+    # 1. Definir colección para el día exacto
     col = (
         ee.ImageCollection("MODIS/061/MOD09GA")
         .filterBounds(uruguay)
-        .filterDate(str(start), str(end))
+        .filterDate(start_str, end_str)
         .sort("system:time_start", False)
     )
 
+    if col.size().getInfo() == 0:
+        print(f"No hay imágenes NDVI en catálogo para {start_str}")
+        return None
+
     img = ee.Image(col.first())
 
-    ndvi = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(
-        uruguay)  # propagate original data mask
+    # 2. VALIDACIÓN DE PÍXELES REALES (Evita TIFs vacíos por nubes o fuera de órbita)
+    # MOD09GA b02 es NIR, b01 es Red. Chequeamos b02.
+    pixel_count = img.select('sur_refl_b02').clip(uruguay).reduceRegion(
+        reducer=ee.Reducer.count(),
+        geometry=uruguay,
+        scale=2000,
+        maxPixels=1e8
+    ).values().get(0).getInfo()
+    print(f"Conteo de píxeles para NDVI en {start_str}: {pixel_count}")
+    if not pixel_count or pixel_count < 10:
+        print(f"SALTANDO: {start_str} no tiene suficientes datos válidos sobre Uruguay.")
+        return None
+
+    # 3. PROCESAMIENTO
+    ndvi_img = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(uruguay)
     alpha = ee.Image.constant(1).clip(uruguay).rename('alpha')
-    out = ndvi.toFloat().addBands(alpha.toFloat())  # add alpha band
+    out = ndvi_img.toFloat().addBands(alpha.toFloat())
 
-    today_str = datetime.datetime.now().strftime('%Y%m%d')
-
-    file_name = f'ndvi/NDVI_Uruguay_{today_str}'
+    date_str = target_date.strftime('%Y%m%d')
+    file_name = f'ndvi/NDVI_Uruguay_{date_str}'
 
     if not BUCKET:
-        raise ValueError("BUCKET_NAME environment variable is not set in ./config/.env")
-    
+        raise ValueError("BUCKET_NAME no configurado en .env")
+
+    # 4. EXPORTACIÓN
     task = ee.batch.Export.image.toCloudStorage(
         image=out,
-        description='NDVI_Uruguay_Export',
-        outputBucket=BUCKET,            
-        #bucket=BUCKET,            
+        description=f'NDVI_Uruguay_{date_str}',
+        outputBucket=BUCKET,
         fileNamePrefix=file_name,
-        #region=uruguay.bounds(),
         region=uruguay,
-        scale=500,
+        #scale=500,
+        scale=1000,
         crs='EPSG:4326',
         fileFormat='GeoTIFF',
-        formatOptions= {
-            'cloudOptimized': True,
-        },
+        formatOptions={'cloudOptimized': True},
         maxPixels=1e13
     )
 
     task.start()
-    print("NDVI export started… waiting for completion.")
+    print(f"Exportación NDVI iniciada para {start_str}...")
     success = wait_for_task(task)
 
-    if not success:
-        return None, None
+    if success:
+        return f"gs://{BUCKET}/{file_name}.tif", target_date
+    return None
 
-    gcs_path = f"gs://{BUCKET}/{file_name}.tif"
-    print("Export completed:", gcs_path)
-    ndvi_date = datetime.datetime.strptime(today_str, '%Y%m%d').date()
-    return gcs_path, ndvi_date
+def ndvi():
+    """Busca y exporta el NDVI válido más reciente de los últimos 7 días."""
+    print("Buscando NDVI más reciente (ventana 7 días)...")
+    for i in range(7):
+        target_date = datetime.date.today() - datetime.timedelta(days=i)
+        result = _process_and_export_ndvi(target_date)
+        if result:
+            print(f"NDVI completado: {result[0]}")
+            return result
+    print("No se encontró NDVI válido en la última semana.")
+    return None, None
+
+def ndvi_multiple_days(num_days):
+    """Exporta NDVI para múltiples días, ignorando los que no tengan datos."""
+    print("Exportando NDVI para múltiples días...")
+    results = []
+    for i in range(num_days):
+        target_date = datetime.date.today() - datetime.timedelta(days=i)
+        result = _process_and_export_ndvi(target_date)
+        if result:
+            results.append(result)
+    return results
 
 if __name__ == "__main__":
     ndvi()
