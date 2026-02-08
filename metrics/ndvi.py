@@ -1,7 +1,9 @@
 import os
 import ee
 import datetime
+import db
 from dotenv import load_dotenv
+from db import wildfiresDB
 from utils import wait_for_task, uruguay, gee_authenticate
 
 load_dotenv("./config/.env")
@@ -31,6 +33,18 @@ def _process_and_export_ndvi(target_date):
         return None
 
     img = ee.Image(col.first())
+    actual_date_timestamp = img.get('system:time_start').getInfo()
+    actual_date = datetime.datetime.fromtimestamp(actual_date_timestamp / 1000.0).date()
+    actual_date_str = actual_date.strftime('%Y%m%d')
+
+    # 2. Chequear si ya existe en DB antes de procesar/exportar
+    wildfiresdb = wildfiresDB()
+    try:
+        if wildfiresdb.metric_exists(actual_date, "ndvi"):
+            print(f"NDVI ya existe en DB para {actual_date_str}. Se omite exportación.")
+            return None
+    finally:
+        wildfiresdb.close()
 
     # 2. VALIDACIÓN DE PÍXELES REALES (Evita TIFs vacíos por nubes o fuera de órbita)
     # MOD09GA b02 es NIR, b01 es Red. Chequeamos b02.
@@ -40,26 +54,26 @@ def _process_and_export_ndvi(target_date):
         scale=2000,
         maxPixels=1e8
     ).values().get(0).getInfo()
-    print(f"Conteo de píxeles para NDVI en {start_str}: {pixel_count}")
+    #print(f"Conteo de píxeles para NDVI en {start_str}: {pixel_count}")
     if not pixel_count or pixel_count < 10:
         print(f"SALTANDO: {start_str} no tiene suficientes datos válidos sobre Uruguay.")
         return None
 
-    # 3. PROCESAMIENTO
+    # 4. PROCESAMIENTO
     ndvi_img = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(uruguay)
     alpha = ee.Image.constant(1).clip(uruguay).rename('alpha')
     out = ndvi_img.toFloat().addBands(alpha.toFloat())
 
     date_str = target_date.strftime('%Y%m%d')
-    file_name = f'ndvi/NDVI_Uruguay_{date_str}'
-
+    file_name = f'ndvi/NDVI_Uruguay_{actual_date_str}'
+    
     if not BUCKET:
         raise ValueError("BUCKET_NAME no configurado en .env")
 
     # 4. EXPORTACIÓN
     task = ee.batch.Export.image.toCloudStorage(
         image=out,
-        description=f'NDVI_Uruguay_{date_str}',
+        description=f'NDVI_Uruguay_{actual_date_str}',
         outputBucket=BUCKET,
         fileNamePrefix=file_name,
         region=uruguay,
@@ -72,7 +86,7 @@ def _process_and_export_ndvi(target_date):
     )
 
     task.start()
-    print(f"Exportación NDVI iniciada para {start_str}...")
+    print(f"Exportación NDVI iniciada para {actual_date_str}...")
     success = wait_for_task(task)
 
     if success:
@@ -80,9 +94,9 @@ def _process_and_export_ndvi(target_date):
     return None
 
 def ndvi():
-    """Busca y exporta el NDVI válido más reciente de los últimos 7 días."""
-    print("Buscando NDVI más reciente (ventana 7 días)...")
-    for i in range(7):
+    """Busca y exporta el NDVI válido más reciente de los últimos 5 días."""
+    print("Buscando NDVI más reciente (ventana 5 días)...")
+    for i in range(5):
         target_date = datetime.date.today() - datetime.timedelta(days=i)
         result = _process_and_export_ndvi(target_date)
         if result:

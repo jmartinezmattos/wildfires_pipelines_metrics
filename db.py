@@ -49,6 +49,20 @@ class wildfiresDB:
             self.conn = None
             self.cursor = None
 
+    def metric_exists(self, acq_datetime, metric_name):
+        """Verifica si ya existe un registro para esa fecha y métrica."""
+        if not self.conn or not self.cursor:
+            return False
+        
+        sql = f"SELECT id FROM {METRICS_TABLE} WHERE acq_datetime = %s AND gcs_path LIKE %s LIMIT 1"
+        # Usamos LIKE para verificar si el nombre de la métrica está en el path
+        try:
+            self.cursor.execute(sql, (acq_datetime, f"%/{metric_name}/%"))
+            return self.cursor.fetchone() is not None
+        except mysql.connector.Error as err:
+            print(f"Error al verificar existencia: {err}")
+            return False
+        
     def insert_metric_register(self, gcs_path, acq_datetime, metric):
 
         if not self.conn or not self.cursor:

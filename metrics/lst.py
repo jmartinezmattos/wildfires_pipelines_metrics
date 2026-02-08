@@ -4,6 +4,7 @@ import ee
 import datetime
 from dotenv import load_dotenv
 from utils import wait_for_task, uruguay, gee_authenticate
+from db import wildfiresDB
 
 
 load_dotenv("./config/.env")
@@ -39,7 +40,7 @@ def get_collections(start_str, end_str):
     goes_coll = ee.ImageCollection("NOAA/GOES/16/MCMIPF").filterDate(start_str, end_str).filterBounds(uruguay).select("CMI_C13")
     return modis_coll, viirs_coll, goes_coll
 
-def select_base_image(modis_coll, viirs_coll, goes_coll):
+def select_base_image(modis_coll, viirs_coll, goes_coll, target_date):
     """
     Perform cascade selection: MODIS -> VIIRS -> GOES.
     Returns img_base, source_name, img_modis, img_viirs, goes_coll
@@ -50,18 +51,24 @@ def select_base_image(modis_coll, viirs_coll, goes_coll):
 
     img_base = None
     source_name = ""
+    actual_date = target_date
 
     if img_modis:
         img_base = img_modis.multiply(0.02)
         source_name = "MODIS"
+        ts = img_modis.get('system:time_start').getInfo()
+        actual_date = datetime.datetime.fromtimestamp(ts / 1000.0).date()
     elif img_viirs:
         img_base = img_viirs.multiply(0.02)
         source_name = "VIIRS"
+        ts = img_viirs.get('system:time_start').getInfo()
+        actual_date = datetime.datetime.fromtimestamp(ts / 1000.0).date()
     elif goes_coll.size().getInfo() > 0:
         img_base = goes_coll.median()
         source_name = "GOES"
+        actual_date=target_date
 
-    return img_base, source_name, img_modis, img_viirs, goes_coll
+    return img_base, source_name, actual_date, img_modis, img_viirs, goes_coll
 
 def gap_fill(img_base, source_name, img_viirs, goes_coll):
     """
@@ -126,18 +133,26 @@ def download_super_hybrid_lst(days):
     processedLST = []
 
     for i in range(days):
-        target_date = datetime.date.today() - datetime.timedelta(days=i+1)
+        target_date = datetime.date.today() - datetime.timedelta(days=i + 1)
         start_str, end_str = str(target_date), str(target_date + datetime.timedelta(days=1))
 
         # 1. Definir Colecciones
         modis_coll, viirs_coll, goes_coll = get_collections(start_str, end_str)
 
-        # 2. Cascada de Selección con Validación de Píxeles
-        img_base, source_name, img_modis, img_viirs, goes_coll = select_base_image(modis_coll, viirs_coll, goes_coll)
+        # 2. Cascada de Seleccion con Validacion de Pixeles
+        img_base, source_name, actual_date, img_modis, img_viirs, goes_coll = select_base_image(modis_coll, viirs_coll, goes_coll, target_date)
 
         if img_base is None:
-            print(f"ERROR: Sin datos válidos para {target_date}. Saltando...")
+            print(f"ERROR: Sin datos validos para {target_date}. Saltando...")
             continue
+
+        wildfiresdb = wildfiresDB()
+        try:
+            if wildfiresdb.metric_exists(target_date, "lst"):
+                print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
+                continue
+        finally:
+            wildfiresdb.close()
 
         print(f"[{target_date}] Base: {source_name}")
 
@@ -147,12 +162,12 @@ def download_super_hybrid_lst(days):
         # 4. Post-procesamiento
         out = post_process(img_final)
 
-        # 5. Exportación
-        task, file_name = export_lst_image(out, target_date, "LST_Multi")
-        tasks.append({"task_obj": task, "prefix": file_name, "image_date": target_date})
+        # 5. Exportacion
+        task, file_name = export_lst_image(out, actual_date, "LST_Multi")
+        tasks.append({"task_obj": task, "prefix": file_name, "image_date": actual_date})
 
     # --- Espera Paralela ---
-    print("--- Todas las tareas enviadas. Esperando finalización... ---")
+    print("--- Todas las tareas enviadas. Esperando finalizacion... ---")
     for item in tasks:
         success = wait_for_task(item["task_obj"])
         if success:
@@ -170,21 +185,28 @@ def lst():
     Download LST for the last 1 day using cascade: MODIS -> VIIRS -> GOES
     """
     for i in range(7):
-    # --- DATE RANGE: LAST 1 DAY ---
-        target_date = datetime.date.today() - datetime.timedelta(days=i+1)
-        start_str = str(target_date)
-        end_str = str(target_date + datetime.timedelta(days=1))
+        # --- DATE RANGE: LAST 1 DAY ---
+        target_date = datetime.date.today() - datetime.timedelta(days=i + 1)
 
-        # 1. Definir Colecciones
+        start_str, end_str = str(target_date), str(target_date + datetime.timedelta(days=1))
         modis_coll, viirs_coll, goes_coll = get_collections(start_str, end_str)
 
-        # 2. Cascada de Selección con Validación de Píxeles
-        img_base, source_name, img_modis, img_viirs, goes_coll = select_base_image(modis_coll, viirs_coll, goes_coll)
+        # Obtener imagen y su FECHA REAL
+        img_base, source_name, actual_date, img_modis, img_viirs, goes_coll = select_base_image(
+            modis_coll, viirs_coll, goes_coll, target_date
+        )
 
         if img_base is None:
-            raise ValueError(f"ERROR CRÍTICO: No se encontraron píxeles válidos en ninguna fuente para el día {start_str}")
+            print(f"ERROR: Sin datos para {target_date}")
+            continue
 
-        print(f"Fuente principal seleccionada: {source_name}")
+        wildfiresdb = wildfiresDB()
+        try:
+            if wildfiresdb.metric_exists(target_date, "lst"):
+                print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
+                continue
+        finally:
+            wildfiresdb.close()
 
         # 3. Relleno de huecos
         img_final = gap_fill(img_base, source_name, img_viirs, goes_coll)
@@ -192,10 +214,10 @@ def lst():
         # 4. Post-procesamiento
         out = post_process(img_final)
 
-        # 5. Exportación
-        task, file_name = export_lst_image(out, target_date, "LST_Single_Export")
+        # 5. Exportacion
+        task, file_name = export_lst_image(out, actual_date, "LST_Single_Export")
 
-        print(f"Exportación iniciada para {start_str}... esperando completion.")
+        print(f"Exportacion iniciada para {start_str}... esperando completion.")
 
         success = wait_for_task(task)
 
@@ -203,8 +225,10 @@ def lst():
             return None, None
 
         gcs_path = f"gs://{BUCKET}/{file_name}.tif"
-        print(f"Proceso finalizado con éxito: {gcs_path}")
-    return gcs_path, target_date
+        print(f"Proceso finalizado con exito: {gcs_path}")
+        return gcs_path, target_date
+
+    return None, None
 
 if __name__ == "__main__":
     result = lst()

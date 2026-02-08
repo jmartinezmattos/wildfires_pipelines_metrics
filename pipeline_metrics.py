@@ -13,7 +13,7 @@ def pipeline_metrics(download_to_local=False):
     gcs_paths = []
 
     print("Starting data exports to GCS bucket...")
-    
+    """ 
     fwi_path, fwi_date = fwi()
     print("starting FWI export...")
     if fwi_path:
@@ -61,11 +61,12 @@ def pipeline_metrics(download_to_local=False):
             acq_datetime=lst_date,
             metric="LST"
         )
+    
     """
-
     # Exportar FWI para varios días y poblar la base de datos
       # Cambia este valor según lo que necesites poblar
     fwi_results = fwi_multiple_days(7)
+    fwi_path, fwi_date = fwi()
     print("FWI multiple days export")
     for fwi_path, fwi_date in fwi_results:
         if fwi_path:
@@ -80,6 +81,7 @@ def pipeline_metrics(download_to_local=False):
     
     # Exportar NDVI para varios días y poblar la base de datos
     ndvi_results = ndvi_multiple_days(7)
+    ndvi_path, ndvi_date = ndvi()
     print("NDVI multiple days export")
     for ndvi_path, ndvi_date in ndvi_results:
         if ndvi_path:
@@ -96,6 +98,7 @@ def pipeline_metrics(download_to_local=False):
     
     # Exportar RGB para varios días y poblar la base de datos
     aqua_rgb_results = export_modis_aqua_rgb_multiple_days(7)
+    aqua_rgb_path, aqua_rgb_date = rgb()
     print("MODIS AQUA RGB multiple days export")
     for aqua_rgb_path, aqua_rgb_date in aqua_rgb_results:
         if aqua_rgb_path:
@@ -109,6 +112,7 @@ def pipeline_metrics(download_to_local=False):
             )
     
     resultadosLST = download_super_hybrid_lst(7)
+    lst_path, lst_date = lst()
     print("LST multiple days export")
     for lst_path, lst_date in resultadosLST:
         if lst_path:
@@ -127,7 +131,7 @@ def pipeline_metrics(download_to_local=False):
     if download_to_local:
         local_dir = "data"
         os.makedirs(local_dir, exist_ok=True)
-        move_data_from_gcs_to_local(gcs_paths, local_dir)"""
+        move_data_from_gcs_to_local(gcs_paths, local_dir)
 
 if __name__ == "__main__":
 

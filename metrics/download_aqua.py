@@ -1,6 +1,7 @@
 import os
 import ee
 import datetime
+from db import wildfiresDB
 from dotenv import load_dotenv
 from utils import wait_for_task, uruguay, gee_authenticate
 
@@ -30,6 +31,17 @@ def process_and_export_rgb(target_date, is_single=False):
         return None
 
     image = ee.Image(collection.first())
+    actual_date_ms = image.get('system:time_start').getInfo()
+    actual_date = datetime.datetime.fromtimestamp(actual_date_ms / 1000.0).date()
+    actual_date_str = actual_date.strftime("%Y%m%d")
+
+    wildfiresdb = wildfiresDB()
+    try:
+        if wildfiresdb.metric_exists(actual_date, "rgb"):
+            print(f"RGB ya existe en DB para {actual_date_str}. Se omite exportación.")
+            return None
+    finally:
+        wildfiresdb.close()
 
     # --- VALIDACIÓN DE PÍXELES VACÍOS ---
     # Contamos píxeles en la banda 1. Usamos una escala de 2000 para que sea rápido.
@@ -40,7 +52,7 @@ def process_and_export_rgb(target_date, is_single=False):
         maxPixels=1e8
     ).values().get(0).getInfo()
 
-    print(f"Conteo de píxeles para RGB en {start_str}: {pixel_count}")
+    print(f"IMAGEN DETECTADA: Pedida={start_str} | Real Satélite={actual_date_str} | Píxeles={pixel_count}")
     if not pixel_count or pixel_count < 10: # Si hay menos de 10 píxeles, está vacío
         print(f"SALTANDO: Imagen de {start_str} sin datos válidos (posibles nubes o fuera de órbita).")
         return None
@@ -51,11 +63,11 @@ def process_and_export_rgb(target_date, is_single=False):
     out = rgb.toFloat().addBands(alpha.toFloat())
 
     date_str = target_date.strftime("%Y%m%d")
-    prefix = f"rgb/MODIS_AQUA_RGB_Uruguay_{date_str}"
+    prefix = f"rgb/MODIS_AQUA_RGB_Uruguay_{actual_date_str}"
     
     task = ee.batch.Export.image.toCloudStorage(
         image=out,
-        description=f"MODIS_AQUA_RGB_{date_str}",
+        description=f"MODIS_AQUA_RGB_{actual_date_str}",
         bucket=BUCKET,
         fileNamePrefix=prefix,
         region=uruguay.bounds(),
@@ -68,24 +80,24 @@ def process_and_export_rgb(target_date, is_single=False):
     )
 
     task.start()
-    print(f"Exportación iniciada para {start_str}...")
+    print(f"Exportación iniciada para {actual_date_str}...")
     success = wait_for_task(task)
 
     if success:
-        return f"gs://{BUCKET}/{prefix}.tif", start_str
+        return f"gs://{BUCKET}/{prefix}.tif", actual_date_str
     return None
 
 def rgb():
-    """Exporta la imagen más reciente válida de los últimos 30 días."""
-    print("Buscando imagen más reciente en los últimos 30 días...")
-    for i in range(30):
+    """Exporta la imagen más reciente válida de los últimos 7 días."""
+    print("Buscando imagen más reciente en los últimos 7 días...")
+    for i in range(7):
         target_date = datetime.date.today() - datetime.timedelta(days=i)
         result = process_and_export_rgb(target_date)
         if result:
             print(f"Imagen encontrada y exportada: {result[0]}")
             return result
-    print("No se encontró ninguna imagen válida en los últimos 30 días.")
-    return None
+    print("No se encontró ninguna imagen válida en los últimos 7 días.")
+    return None, None
 
 def export_modis_aqua_rgb_multiple_days(num_days):
     """Exporta imágenes para un rango de días, saltando las vacías."""

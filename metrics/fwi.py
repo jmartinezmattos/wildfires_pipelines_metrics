@@ -5,6 +5,7 @@ from gee_fwi.FWI import FWICalculator
 from gee_fwi.FWIInputs import FWI_GFS_GSMAP
 from dotenv import load_dotenv
 from utils import wait_for_task, uruguay, gee_authenticate
+from db import wildfiresDB
 
 load_dotenv("./config/.env")
 BUCKET = os.getenv("BUCKET_NAME")
@@ -15,29 +16,37 @@ gee_authenticate(cloud_env=CLOUD_ENV, gee_project=GEE_PROJECT)
 
 def _process_and_export_fwi(obs, bounds, timezone):
     """
-    Lógica centralizada para calcular y exportar FWI.
+    Logica centralizada para calcular y exportar FWI.
     """
     print(f"Calculando FWI para la fecha: {obs.strftime('%Y-%m-%d')}...")
-    
+
+    wildfiresdb = wildfiresDB()
+    try:
+        if wildfiresdb.metric_exists(obs, "fwi"):
+            print(f"FWI ya existe en DB para {obs}. Se omite exportacion.")
+            return None
+    finally:
+        wildfiresdb.close()
+
     try:
         # 1. Preparar entradas y calcular
         inputs = FWI_GFS_GSMAP(obs, timezone, bounds)
         calculator = FWICalculator(obs, inputs)
         calculator.set_previous_codes()
         fwi_img = calculator.compute()
-        
-        # 2. VALIDACIÓN: Verificar si la imagen resultante tiene datos
-        # En FWI, un conteo de píxeles es la mejor forma de saber si el modelo falló
+
+        # 2. VALIDACION: Verificar si la imagen resultante tiene datos
+        # En FWI, un conteo de pixeles es la mejor forma de saber si el modelo fallo
         pixel_count = fwi_img.clip(uruguay).reduceRegion(
             reducer=ee.Reducer.count(),
             geometry=uruguay,
             scale=5000, # Escala gruesa para rapidez
             maxPixels=1e8
         ).values().get(0).getInfo()
-        
-        print(f"Conteo de píxeles para FWI en {obs}: {pixel_count}")
+
+        print(f"Conteo de pixeles para FWI en {obs}: {pixel_count}")
         if not pixel_count or pixel_count == 0:
-            print(f"SALTANDO: El cálculo de FWI para {obs} no devolvió píxeles válidos.")
+            print(f"SALTANDO: El calculo de FWI para {obs} no devolvio pixeles validos.")
             return None
 
         # 3. Preparar imagen para exportar
@@ -48,7 +57,7 @@ def _process_and_export_fwi(obs, bounds, timezone):
         date_str = obs.strftime('%Y%m%d')
         file_name = f'fwi/FWI_Uruguay_{date_str}'
 
-        # 4. Exportación
+        # 4. Exportacion
         task = ee.batch.Export.image.toCloudStorage(
             image=out,
             description=f'FWI_Uruguay_{date_str}',
