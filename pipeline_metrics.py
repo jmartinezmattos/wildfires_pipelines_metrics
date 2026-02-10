@@ -13,7 +13,7 @@ def pipeline_metrics(download_to_local=False):
     gcs_paths = []
 
     print("Starting data exports to GCS bucket...")
-    """ 
+     
     fwi_path, fwi_date = fwi()
     print("starting FWI export...")
     if fwi_path:
@@ -125,7 +125,7 @@ def pipeline_metrics(download_to_local=False):
             )
 
     
-
+    """
     print("All exports completed.")
 
     if download_to_local:
