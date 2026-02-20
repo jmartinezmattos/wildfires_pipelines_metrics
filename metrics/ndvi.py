@@ -46,21 +46,26 @@ def _process_and_export_ndvi(target_date):
     finally:
         wildfiresdb.close()
 
-    # 2. VALIDACIÓN DE PÍXELES REALES (Evita TIFs vacíos por nubes o fuera de órbita)
-    # MOD09GA b02 es NIR, b01 es Red. Chequeamos b02.
-    pixel_count = img.select('sur_refl_b02').clip(uruguay).reduceRegion(
-        reducer=ee.Reducer.count(),
-        geometry=uruguay,
-        scale=2000,
-        maxPixels=1e8
-    ).values().get(0).getInfo()
-    #print(f"Conteo de píxeles para NDVI en {start_str}: {pixel_count}")
-    if not pixel_count or pixel_count < 10:
-        print(f"SALTANDO: {start_str} no tiene suficientes datos válidos sobre Uruguay.")
+
+    # 3. PROCESAMIENTO
+    ndvi_img = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(uruguay)
+
+    stats = ndvi_img.reduceRegion(
+    reducer=ee.Reducer.count(),
+    geometry=uruguay,
+    scale=1000,
+    maxPixels=1e13
+)
+
+    valid_pixels = stats.get("NDVI")
+    valid_pixels = ee.Number(valid_pixels)
+
+    pixel_count = valid_pixels.getInfo()
+
+    if pixel_count is None or pixel_count < 100:
+        print(f"SALTANDO: {start_str} sin suficiente cobertura NDVI válida.")
         return None
 
-    # 4. PROCESAMIENTO
-    ndvi_img = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(uruguay)
     alpha = ee.Image.constant(1).clip(uruguay).rename('alpha')
     out = ndvi_img.toFloat().addBands(alpha.toFloat())
 

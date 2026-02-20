@@ -2,6 +2,7 @@ import os
 from metrics.fwi import fwi, fwi_multiple_days
 from metrics.ndvi import ndvi, ndvi_multiple_days
 from metrics.lst import lst, download_super_hybrid_lst
+from metrics.lst2 import lst2
 from metrics.download_aqua import rgb, export_modis_aqua_rgb_multiple_days
 from utils import move_data_from_gcs_to_local
 from db import wildfiresDB
@@ -49,9 +50,20 @@ def pipeline_metrics(download_to_local=False):
                 acq_datetime=aqua_rgb_date,
                 metric="RGB"
         )
-
-
-    lst_path, lst_date = lst()
+ 
+    
+    # lst_path, lst_date = lst()
+    # print("starting LST export...")
+    # if lst_path:
+    #     gcs_paths.append(lst_path)
+    #     print("LST exported to:", lst_path)
+    #     wildfiresdb.insert_metric_register(
+    #         gcs_path=lst_path,
+    #         acq_datetime=lst_date,
+    #         metric="LST"
+    #     )
+   
+    lst_path, lst_date = lst2()
     print("starting LST export...")
     if lst_path:
         gcs_paths.append(lst_path)
@@ -61,7 +73,20 @@ def pipeline_metrics(download_to_local=False):
             acq_datetime=lst_date,
             metric="LST"
         )
-    
+    # resultadosLST = download_super_hybrid_lst(7)
+    # lst_path, lst_date = lst()
+    # print("LST multiple days export")
+    # for lst_path, lst_date in resultadosLST:
+    #     if lst_path:
+    #         gcs_paths.append(lst_path)
+    #         print("LST exported to:", lst_path)
+    #         wildfiresdb.insert_metric_register(
+    #             gcs_path=lst_path,
+    #             acq_datetime=lst_date,
+    #             metric="LST"
+    #         )
+
+
     """
     # Exportar FWI para varios días y poblar la base de datos
       # Cambia este valor según lo que necesites poblar

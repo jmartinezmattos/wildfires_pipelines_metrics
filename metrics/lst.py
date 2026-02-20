@@ -33,44 +33,46 @@ def get_valid_image(collection, scale=1000):
 
 def get_collections(start_str, end_str):
     """
-    Define and return the image collections for MODIS, VIIRS, and GOES.
+    Define and return the image collections for MODIS TERRA, AQUA AND VIIRS.
     """
-    modis_coll = ee.ImageCollection("MODIS/061/MOD11A1").filterDate(start_str, end_str).filterBounds(uruguay).select("LST_Day_1km")
+    terra_coll = ee.ImageCollection("MODIS/061/MOD11A1").filterDate(start_str, end_str).filterBounds(uruguay).select("LST_Day_1km")
+    aqua_coll = ee.ImageCollection("MODIS/061/MYD11A1").filterDate(start_str, end_str).filterBounds(uruguay).select("LST_Day_1km")
     viirs_coll = ee.ImageCollection("NASA/VIIRS/002/VNP21A1D").filterDate(start_str, end_str).filterBounds(uruguay).select("LST_1KM")
-    goes_coll = ee.ImageCollection("NOAA/GOES/16/MCMIPF").filterDate(start_str, end_str).filterBounds(uruguay).select("CMI_C13")
-    return modis_coll, viirs_coll, goes_coll
+    return terra_coll, aqua_coll, viirs_coll
 
-def select_base_image(modis_coll, viirs_coll, goes_coll, target_date):
+def select_base_image(terra_coll, aqua_coll, viirs_coll, target_date):
     """
-    Perform cascade selection: MODIS -> VIIRS -> GOES.
-    Returns img_base, source_name, img_modis, img_viirs, goes_coll
+    Perform cascade selection: MODIS TERRA-> VIIRS
+    Returns img_base, source_name, img_terra, img_viirs, aqua_coll
     """
-    img_modis = get_valid_image(modis_coll)
+    img_terra = get_valid_image(terra_coll)
+    img_aqua = get_valid_image(aqua_coll)
     img_viirs = get_valid_image(viirs_coll)
-    # For GOES, we'll use the collection later
 
     img_base = None
     source_name = ""
     actual_date = target_date
 
-    if img_modis:
-        img_base = img_modis.multiply(0.02)
+    if img_terra:
+        img_base = img_terra.multiply(0.02)
         source_name = "MODIS"
-        ts = img_modis.get('system:time_start').getInfo()
+        ts = img_terra.get('system:time_start').getInfo()
+        actual_date = datetime.datetime.fromtimestamp(ts / 1000.0).date()
+    elif img_aqua:
+        img_base = img_aqua.multiply(0.02)
+        source_name = "MODIS_AQUA" #check
+        ts = img_aqua.get('system:time_start').getInfo()
         actual_date = datetime.datetime.fromtimestamp(ts / 1000.0).date()
     elif img_viirs:
         img_base = img_viirs.multiply(0.02)
         source_name = "VIIRS"
         ts = img_viirs.get('system:time_start').getInfo()
         actual_date = datetime.datetime.fromtimestamp(ts / 1000.0).date()
-    elif goes_coll.size().getInfo() > 0:
-        img_base = goes_coll.median()
-        source_name = "GOES"
-        actual_date=target_date
 
-    return img_base, source_name, actual_date, img_modis, img_viirs, goes_coll
 
-def gap_fill(img_base, source_name, img_viirs, goes_coll):
+    return img_base, source_name, actual_date, img_terra, img_aqua, img_viirs
+
+def gap_fill(img_base, source_name, img_viirs, img_aqua, img_terra):
     """
     Perform gap filling (unmasking) with other sources.
     """
@@ -81,18 +83,41 @@ def gap_fill(img_base, source_name, img_viirs, goes_coll):
         mask= v_fill.gt(270).And(v_fill.lt(330))
         v_fill= v_fill.updateMask(mask)
         img_final = img_final.unmask(v_fill.resample('bilinear').reproject(crs=img_final.projection()))
-
- # 2. Intentar rellenar con GOES (siempre disponible pero menor resolución)
-    # Verificamos si la colección GOES tiene imágenes
-
-    if goes_coll.size().getInfo() > 0:
-        g_fill = goes_coll.median()
-        mask= g_fill.gt(270).And(g_fill.lt(330))
-        g_fill= g_fill.updateMask(mask)
-        g_resampled = g_fill.resample('bilinear').reproject(crs=img_final.projection(), scale=1000)
-        img_final = img_final.unmask(g_resampled)
+    elif source_name == "MODIS_AQUA" and img_aqua:
+        a_fill = img_aqua.multiply(0.02)
+        mask= a_fill.gt(270).And(a_fill.lt(330))
+        a_fill= a_fill.updateMask(mask)
+        img_final = img_final.unmask(a_fill.resample('bilinear').reproject(crs=img_final.projection()))
+    elif source_name == "MODIS" and img_terra:
+        t_fill = img_terra.multiply(0.02)
+        mask= t_fill.gt(270).And(t_fill.lt(330))
+        t_fill= t_fill.updateMask(mask)
+        img_final = img_final.unmask(t_fill.resample('bilinear').reproject(crs=img_final.projection()))
 
     return img_final
+
+def merge_sources(img_terra, img_aqua, img_viirs):
+
+    images = []
+
+    if img_viirs:
+        images.append(img_viirs.multiply(0.02))
+
+    if img_terra:
+        images.append(img_terra.multiply(0.02))
+
+    if img_aqua:
+        images.append(img_aqua.multiply(0.02))
+
+    if not images:
+        return None
+
+    img_final = images[0]
+    for img in images[1:]:
+        img_final = img_final.unmask(img)
+
+    return img_final
+
 
 def post_process(img_final):
     """
@@ -137,11 +162,11 @@ def download_super_hybrid_lst(days):
         start_str, end_str = str(target_date), str(target_date + datetime.timedelta(days=1))
 
         # 1. Definir Colecciones
-        modis_coll, viirs_coll, goes_coll = get_collections(start_str, end_str)
+        terra_coll,  aqua_coll, viirs_coll = get_collections(start_str, end_str)
 
         # 2. Cascada de Seleccion con Validacion de Pixeles
-        img_base, source_name, actual_date, img_modis, img_viirs, goes_coll = select_base_image(modis_coll, viirs_coll, goes_coll, target_date)
-
+        # img_base, source_name, actual_date, img_terra, img_aqua, img_viirs = select_base_image(terra_coll, aqua_coll, viirs_coll, target_date)
+        """ 
         if img_base is None:
             print(f"ERROR: Sin datos validos para {target_date}. Saltando...")
             continue
@@ -157,8 +182,18 @@ def download_super_hybrid_lst(days):
         print(f"[{target_date}] Base: {source_name}")
 
         # 3. Relleno de huecos
-        img_final = gap_fill(img_base, source_name, img_viirs, goes_coll)
+        img_final = gap_fill(img_base, source_name, img_viirs, aqua_coll)
+         """        
+        img_terra = get_valid_image(terra_coll)
+        img_aqua  = get_valid_image(aqua_coll)
+        img_viirs = get_valid_image(viirs_coll)
 
+        img_final = merge_sources(img_terra, img_aqua, img_viirs)
+
+        if img_final is None:
+            continue
+
+        
         # 4. Post-procesamiento
         out = post_process(img_final)
 
@@ -189,12 +224,11 @@ def lst():
         target_date = datetime.date.today() - datetime.timedelta(days=i + 1)
 
         start_str, end_str = str(target_date), str(target_date + datetime.timedelta(days=1))
-        modis_coll, viirs_coll, goes_coll = get_collections(start_str, end_str)
+        terra_coll,  aqua_coll, viirs_coll = get_collections(start_str, end_str)
 
         # Obtener imagen y su FECHA REAL
-        img_base, source_name, actual_date, img_modis, img_viirs, goes_coll = select_base_image(
-            modis_coll, viirs_coll, goes_coll, target_date
-        )
+        #img_base, source_name, actual_date, img_terra, img_aqua, img_viirs = select_base_image(terra_coll, aqua_coll, viirs_coll, target_date)
+
 
         if img_base is None:
             print(f"ERROR: Sin datos para {target_date}")
@@ -209,7 +243,7 @@ def lst():
             wildfiresdb.close()
 
         # 3. Relleno de huecos
-        img_final = gap_fill(img_base, source_name, img_viirs, goes_coll)
+        img_final = gap_fill(img_base, source_name, img_viirs, aqua_coll)
 
         # 4. Post-procesamiento
         out = post_process(img_final)
