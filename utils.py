@@ -1,6 +1,5 @@
 import ee
 import time
-import subprocess
 import os
 from dotenv import load_dotenv
 
@@ -35,15 +34,3 @@ def wait_for_task(task, poll=10):
             return False
 
         time.sleep(poll)
-
-def move_data_from_gcs_to_local(bucket_path_lists, local_dir):
-    os.makedirs(local_dir, exist_ok=True)
-    
-    for gcs_path in bucket_path_lists:
-        cmd = ["gsutil", "-m" , "cp", "-r", gcs_path, local_dir]
-        
-        try:
-            subprocess.run(cmd, check=True, shell=True)
-            print(f"File downloaded: {gcs_path}")
-        except subprocess.CalledProcessError as e:
-            print(f"Error downloading {gcs_path}: {e}")
