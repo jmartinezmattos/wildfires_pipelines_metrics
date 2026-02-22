@@ -4,3 +4,4 @@ dotenv
 tqdm
 Pillow
 mysql-connector-python
+numpy
