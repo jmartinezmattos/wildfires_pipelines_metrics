@@ -8,6 +8,7 @@ import rasterio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import numpy as np
+from rasterio.enums import Resampling
 
 load_dotenv("./config/.env")
 
@@ -24,7 +25,7 @@ timeout = 15
 def extract_band_inplace(input_path):
 
     band_number = 1
-    temp_path = input_path.replace(".tif", "_temp.tif")
+    temp_path = input_path.replace(".tif", "_cog.tif")
 
     with rasterio.open(input_path) as src:
         band = src.read(band_number)
@@ -36,24 +37,33 @@ def extract_band_inplace(input_path):
             alpha = np.where(band >= 0, 1, 0).astype("uint8")
 
         profile = src.profile.copy()
-        profile.update(
-            count=2,          
-            dtype=band.dtype
-        )
 
-        with rasterio.open(temp_path, "w", **profile) as dst:
-            dst.write(band, 1) 
+        # Crear COG
+        with rasterio.open(
+            temp_path,
+            "w",
+            driver="COG",
+            height=src.height,
+            width=src.width,
+            count=2,
+            dtype=band.dtype,
+            crs=src.crs,
+            transform=src.transform,
+            nodata=nodata,
+            compress="deflate",     # o "lzw"
+            blocksize=512,          # tiling interno
+            overview_resampling=Resampling.average
+        ) as dst:
+
+            dst.write(band, 1)
             dst.write(alpha, 2)
 
             dst.set_band_description(1, "fwi")
             dst.set_band_description(2, "alpha")
 
-            if nodata is not None:
-                dst.nodata = nodata
-
     os.replace(temp_path, input_path)
 
-    print(f"Band 1 (fwi) and Band 2 (alpha) written for file: {input_path}")
+    print(f"COG generated correctly: {input_path}")
     return input_path
 
 def copy_gcs(path_from, path_to):
@@ -132,7 +142,7 @@ def fwi(date: None | datetime = None):
         tz_uy = ZoneInfo("America/Montevideo")
         now_uy = datetime.now(tz_uy)
 
-        if now_uy.hour < 12:
+        if now_uy.hour < 14:
             input_date = (now_uy - timedelta(days=1)).date()
         else:
             input_date = now_uy.date()
