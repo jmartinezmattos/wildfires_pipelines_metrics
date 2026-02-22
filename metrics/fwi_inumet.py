@@ -9,15 +9,36 @@ from zoneinfo import ZoneInfo
 
 load_dotenv("./config/.env")
 
-BUCKET = os.getenv("FWI_BUCKET")
+BUCKET = os.getenv("BUCKET_NAME")
 GEE_PROJECT = os.getenv("GEE_PROJECT")
 CLOUD_ENV = os.getenv("CLOUD_ENV", "0").lower() == "1"
 
 base_url = "https://www.inumet.gub.uy/reportes/fwi/"
-output_folder = "./data/fwi_data"
+output_folder = "./data/fwi"
 
 retries = 3
 timeout = 15
+
+import rasterio
+import os
+
+def extract_band_inplace(input_path, band_number=2):
+
+    temp_path = input_path.replace(".tif", "_temp.tif")
+
+    with rasterio.open(input_path) as src:
+        band = src.read(band_number)
+
+        profile = src.profile
+        profile.update(count=1)
+
+        with rasterio.open(temp_path, "w", **profile) as dst:
+            dst.write(band, 1)
+
+    os.replace(temp_path, input_path)
+
+    print(f"Band {band_number} extracted in place for file: {input_path}")
+    return input_path
 
 def copy_gcs(path_from, path_to):
 
@@ -101,6 +122,8 @@ def fwi():
     filepath = download_file(today)
 
     if filepath:
+        extract_band_inplace(filepath, band_number=1)
+
         gcs_dir = f"gs://{BUCKET}/fwi_inumet"
         gcs_path = f"{gcs_dir}/{os.path.basename(filepath)}"
 
@@ -112,3 +135,6 @@ def fwi():
             return None, None
     else: 
         return None, None
+
+
+fwi()
