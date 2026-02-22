@@ -4,6 +4,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import subprocess
 import platform
+import rasterio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -19,10 +20,9 @@ output_folder = "./data/fwi"
 retries = 3
 timeout = 15
 
-import rasterio
-import os
+def extract_band_inplace(input_path):
 
-def extract_band_inplace(input_path, band_number=2):
+    band_number = 1
 
     temp_path = input_path.replace(".tif", "_temp.tif")
 
@@ -122,7 +122,7 @@ def fwi():
     filepath = download_file(today)
 
     if filepath:
-        extract_band_inplace(filepath, band_number=1)
+        extract_band_inplace(filepath)
 
         gcs_dir = f"gs://{BUCKET}/fwi_inumet"
         gcs_path = f"{gcs_dir}/{os.path.basename(filepath)}"
