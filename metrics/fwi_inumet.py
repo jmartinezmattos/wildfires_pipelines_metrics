@@ -22,9 +22,6 @@ retries = 3
 timeout = 15
 
 def extract_band_inplace(input_path):
-    import os
-    import rasterio
-    import numpy as np
 
     band_number = 1
     temp_path = input_path.replace(".tif", "_temp.tif")
