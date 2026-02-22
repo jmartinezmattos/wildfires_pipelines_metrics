@@ -124,18 +124,22 @@ def download_file(date_obj):
     return filepath
 
 
-def fwi():
-    today = datetime.today()
+def fwi(date: None | datetime = None):
 
-    tz_uy = ZoneInfo("America/Montevideo")
-    now_uy = datetime.now(tz_uy)
+    if date is None:
+        input_date = datetime.today()
 
-    if now_uy.hour < 12:
-        today = (now_uy - timedelta(days=1)).date()
+        tz_uy = ZoneInfo("America/Montevideo")
+        now_uy = datetime.now(tz_uy)
+
+        if now_uy.hour < 12:
+            input_date = (now_uy - timedelta(days=1)).date()
+        else:
+            input_date = now_uy.date()
     else:
-        today = now_uy.date()
+        input_date = date
 
-    filepath = download_file(today)
+    filepath = download_file(input_date)
 
     if filepath:
         extract_band_inplace(filepath)
@@ -146,11 +150,10 @@ def fwi():
         r = copy_gcs(path_from=filepath, path_to=f"gs://{BUCKET}/fwi_inumet/")
         
         if r:
-            return gcs_path, today
+            return gcs_path, input_date
         else:
             return None, None
     else: 
         return None, None
-
 
 fwi()
