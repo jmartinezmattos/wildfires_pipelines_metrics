@@ -208,18 +208,18 @@ def lst2():
     """
     for i in range(7):
         # --- DATE RANGE: LAST 1 DAY ---
-        target_date = datetime.date.today() - datetime.timedelta(days=i + 4)
+        target_date = datetime.date.today() - datetime.timedelta(days=i + 1)
 
         start_str, end_str = str(target_date), str(target_date + datetime.timedelta(days=1))
         terra_coll,  aqua_coll, viirs_coll = get_collections(start_str, end_str)
      
-        wildfiresdb = wildfiresDB()
-        try:
-            if wildfiresdb.metric_exists(target_date, "lst"):
-                print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
-                continue
-        finally:
-            wildfiresdb.close()
+        # wildfiresdb = wildfiresDB()
+        # try:
+        #     if wildfiresdb.metric_exists(target_date, "lst"):
+        #         print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
+        #         continue
+        # finally:
+        #     wildfiresdb.close()
 
 
         img_terra = get_valid_image(terra_coll)
@@ -258,6 +258,20 @@ def lst2():
             print("No valid LST images found (Terra/Aqua/VIIRS). Skipping.")
             return None, None
         
+                        
+        stats = out.reduceRegion(
+            reducer=ee.Reducer.percentile([2, 98]),
+            geometry=uruguay,
+            scale=1000,
+            maxPixels=1e8
+        ).getInfo()
+
+        # p2 = stats.get("LST_Celsius_p2")
+        # p98 = stats.get("LST_Celsius_p98")
+        # print("p2 es: ", p2)
+        # print("p98 es: ", p98)
+
+
         out = prepare_output_with_nodata(out)
         
         valid = has_valid_data(out, uruguay)
@@ -269,13 +283,7 @@ def lst2():
         # 4. Post-procesamiento
         # out = post_process(img_final).clip(uruguay)
 
-                
-        stats = out.reduceRegion(
-            reducer=ee.Reducer.percentile([2, 98]),
-            geometry=uruguay,
-            scale=1000,
-            maxPixels=1e8
-        ).getInfo()
+
 
         if not stats or "LST_Celsius_p2" not in stats:
             print(f"Advertencia: No se pudieron calcular percentiles para {target_date}. Píxeles insuficientes.")
@@ -303,7 +311,7 @@ def lst2():
 
         gcs_path = f"gs://{BUCKET}/{file_name}.tif"
         print(f"Proceso finalizado con exito: {gcs_path}")
-        return gcs_path, target_date
+        return gcs_path, target_date, p2, p98
 
     return None, None
 
