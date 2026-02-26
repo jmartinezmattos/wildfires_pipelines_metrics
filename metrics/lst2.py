@@ -105,28 +105,6 @@ def merge_sources(img_terra, img_aqua, img_viirs):
     
     return img_final
 
-   
-    # if img_terra is None and img_aqua is None and img_viirs is None:
-    #     return None
-
-    # img_final = None
-
-    # if img_terra:
-    #     img_final = img_terra
-
-    # if img_aqua:
-    #     if img_final:
-    #         img_final = img_final.unmask(img_aqua)
-    #     else:
-    #         img_final = img_aqua
-
-    # if img_viirs:
-    #     if img_final:
-    #         img_final = img_final.unmask(img_viirs)
-    #     else:
-    #         img_final = img_viirs
-
-    # return img_final
 
 def has_valid_data(img, region):
     stats = img.reduceRegion(
@@ -170,7 +148,7 @@ def prepare_output_with_nodata(lst_celsius_img):
     valid_mask = lst_celsius_img.mask().reduce(ee.Reducer.min())
 
     # LST con NoData explícito
-    lst_filled = lst_celsius_img.unmask(-9999).rename("LST_Celsius").toFloat()
+    lst_filled = lst_celsius_img.rename("LST_Celsius").toFloat()
 
     # Alpha: 1 = válido, 0 = no data
     alpha = valid_mask.unmask(0).rename("alpha").toFloat()
@@ -196,7 +174,7 @@ def export_lst_image(out, target_date, description_prefix):
         crs="EPSG:4326",
         fileFormat="GeoTIFF",
         # formatOptions={'cloudOptimized': True} if description_prefix == "LST_Single_Export" else {},
-        formatOptions={'cloudOptimized': True, 'noData': -9999},
+        formatOptions={'cloudOptimized': True},
         maxPixels=1e13 if description_prefix == "LST_Single_Export" else None
     )
     task.start()
@@ -213,13 +191,13 @@ def lst2():
         start_str, end_str = str(target_date), str(target_date + datetime.timedelta(days=1))
         terra_coll,  aqua_coll, viirs_coll = get_collections(start_str, end_str)
      
-        # wildfiresdb = wildfiresDB()
-        # try:
-        #     if wildfiresdb.metric_exists(target_date, "lst"):
-        #         print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
-        #         continue
-        # finally:
-        #     wildfiresdb.close()
+        wildfiresdb = wildfiresDB()
+        try:
+            if wildfiresdb.metric_exists(target_date, "lst"):
+                print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
+                continue
+        finally:
+            wildfiresdb.close()
 
 
         img_terra = get_valid_image(terra_coll)
@@ -276,7 +254,7 @@ def lst2():
         
         valid = has_valid_data(out, uruguay)
         
-        if not valid:
+        if not valid or not valid.getInfo():
             print("No data available.")
             continue
         
