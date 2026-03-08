@@ -77,33 +77,53 @@ def mask_viirs_qa(img):
     return img.updateMask(mask).select("LST_1KM")
 
 
-def merge_sources(img_terra, img_aqua, img_viirs):
+def merge_sources(img_terra, img_aqua, img_viirs, source_terra, source_aqua, source_viirs):
     """
     Priority gap filling:
     Terra (base) → Aqua fills → VIIRS fills
     All images must already be scaled to Kelvin.
     """
-    img_final = None
+    # img_final = None
+    imgs = []
+    sources = []
     
     # Priority: Terra first
-    if img_terra:
-        img_final = img_terra
+    if img_terra is not None:
+        # img_final = img_terra
+        # source_final = source_terra
+        imgs.append(img_terra)
+        sources.append(source_terra)
     
     # Fill gaps with Aqua
-    if img_aqua:
-        if img_final:
-            img_final = img_final.unmask(img_aqua)
-        else:
-            img_final = img_aqua
-    
+    if img_aqua is not None:
+        # if img_final:
+        #     img_final = img_final.unmask(img_aqua)
+        #     source_final = source_final.unmask(source_aqua)
+        # else:
+        #     img_final = img_aqua
+        #     source_final = source_aqua
+        imgs.append(img_aqua)
+        sources.append(source_aqua)
+
     # Fill remaining gaps with VIIRS
     if img_viirs:
-        if img_final:
-            img_final = img_final.unmask(img_viirs)
-        else:
-            img_final = img_viirs
+        # if img_final:
+        #     img_final = img_final.unmask(img_viirs)
+        #     source_final = source_final.unmask(source_viirs)
+        # else:
+        #     img_final = img_viirs
+        #     source_final = source_viirs
+        imgs.append(img_viirs)
+        sources.append(source_viirs)
+    if len(imgs) == 0:
+        return None, None
+    img_final = imgs[0]
+    source_final = sources[0]
+    for i in range(1, len(imgs)):
+        img_final = img_final.unmask(imgs[i])
+        source_final = source_final.unmask(sources[i])
     
-    return img_final
+    return img_final, source_final
 
 
 def has_valid_data(img, region):
@@ -132,7 +152,6 @@ def alpha_band(img):
 
     mask = img.select("LST_Celsius").mask()
     #out = img.toFloat().addBands(mask.rename("alpha").toFloat())
-    
     alpha = ee.Image.constant(1).clip(uruguay).rename("alpha")
     out = img.toFloat().addBands(alpha.toFloat())
     return out
@@ -186,36 +205,37 @@ def lst2():
     """
     for i in range(7):
         # --- DATE RANGE: LAST 1 DAY ---
-        target_date = datetime.date.today() - datetime.timedelta(days=i + 1)
+        target_date = datetime.date.today() - datetime.timedelta(days=i + 4)
 
         start_str, end_str = str(target_date), str(target_date + datetime.timedelta(days=1))
         terra_coll,  aqua_coll, viirs_coll = get_collections(start_str, end_str)
      
-        wildfiresdb = wildfiresDB()
-        try:
-            if wildfiresdb.metric_exists(target_date, "lst"):
-                print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
-                continue
-        finally:
-            wildfiresdb.close()
+        # wildfiresdb = wildfiresDB()
+        # try:
+        #     if wildfiresdb.metric_exists(target_date, "lst"):
+        #         print(f"LST ya existe en DB para {target_date}. Se omite exportacion.")
+        #         continue
+        # finally:
+        #     wildfiresdb.close()
 
 
         img_terra = get_valid_image(terra_coll)
         if img_terra:
             img_terra = mask_modis_qa(img_terra)  # MODIS scale (Kelvin)
             img_terra = img_terra.select("LST_Day_1km").multiply(0.02).rename("LST")  # MODIS scale (Kelvin)
+            source_terra = ee.Image.constant(1).updateMask(img_terra.mask()).rename("source_id")
 
         img_aqua = get_valid_image(aqua_coll)
         if img_aqua:
             img_aqua = mask_modis_qa(img_aqua)  # MODIS scale (Kelvin)
             img_aqua = img_aqua.select("LST_Day_1km").multiply(0.02).rename("LST")  # MODIS scale (Kelvin)
+            source_aqua = ee.Image.constant(2).updateMask(img_aqua.mask()).rename("source_id")
 
         img_viirs = get_valid_image(viirs_coll)
         if img_viirs:
             img_viirs = mask_viirs_qa(img_viirs)  # VIIRS QA mask
             img_viirs = img_viirs.select("LST_1KM").multiply(0.00341802).rename("LST")  # VIIRS scale (Kelvin)
-            # img_viirs = img_viirs.multiply(0.02).rename("LST")  # VIIRS scale (Kelvin)
-
+            source_viirs = ee.Image.constant(3).updateMask(img_viirs.mask()).rename("source_id")
 
         images_list = [img for img in [img_terra, img_aqua, img_viirs] if img is not None]
 
@@ -223,21 +243,32 @@ def lst2():
             print(f"No hay imágenes válidas para {target_date}. Saltando...")
             continue
 
-        # Merge usando prioridad: Terra > Aqua > VIIRS con unmask para máxima cobertura
-        img_final_kelvin = None
-        for img in images_list:
-            if img_final_kelvin is None:
-                img_final_kelvin = img
-            else:
-                img_final_kelvin = img_final_kelvin.unmask(img)
+        # # Merge usando prioridad: Terra > Aqua > VIIRS con unmask para máxima cobertura
+        # img_final_kelvin = None
+        # for img in images_list:
+        #     if img_final_kelvin is None:
+        #         img_final_kelvin = img
+        #     else:
+        #         img_final_kelvin = img_final_kelvin.unmask(img)
         
-        out = post_process(img_final_kelvin).clip(uruguay)
-        if out is None:
+
+        img_final_kelvin, source_final = merge_sources(
+            img_terra if img_terra else None,
+            img_aqua if img_aqua else None,
+            img_viirs if img_viirs else None,
+            source_terra if img_terra else None,
+            source_aqua if img_aqua else None,
+            source_viirs if img_viirs else None,
+        )
+
+        lst_celsius = post_process(img_final_kelvin).clip(uruguay
+        )
+        if lst_celsius is None:
             print("No valid LST images found (Terra/Aqua/VIIRS). Skipping.")
             return None, None
         
                         
-        stats = out.reduceRegion(
+        stats = lst_celsius.reduceRegion(
             reducer=ee.Reducer.percentile([2, 98]),
             geometry=uruguay,
             scale=1000,
@@ -250,9 +281,9 @@ def lst2():
         # print("p98 es: ", p98)
 
 
-        out = prepare_output_with_nodata(out)
+        lst_prepared = prepare_output_with_nodata(lst_celsius)
         
-        valid = has_valid_data(out, uruguay)
+        valid = has_valid_data(lst_prepared, uruguay)
         
         if not valid or not valid.getInfo():
             print("No data available.")
@@ -261,22 +292,11 @@ def lst2():
         # 4. Post-procesamiento
         # out = post_process(img_final).clip(uruguay)
 
-
-
-        if not stats or "LST_Celsius_p2" not in stats:
-            print(f"Advertencia: No se pudieron calcular percentiles para {target_date}. Píxeles insuficientes.")
-            # Puedes usar valores por defecto para el log o simplemente saltar
-            p2, p98 = 0, 50 
-        else:
-            # p2 = stats["LST_Celsius_p2"]
-            # p98 = stats["LST_Celsius_p98"]
-            p2 = stats.get("LST_Celsius_p2", 15) # Valor por defecto si es None
-            p98 = stats.get("LST_Celsius_p98", 40)
-            print(f"Rango visual recomendado: min={p2:.2f}, max={p98:.2f}")
-
-        out = alpha_band(out)
+        
+        out = alpha_band(lst_prepared)
+        out = out.addBands(source_final.toFloat().clip(uruguay))
         # out = reproject(out)
-        out = out.select(["LST_Celsius", "alpha"])
+        out = out.select(["LST_Celsius", "alpha", "source_id"])
         # 5. Exportacion
         task, file_name = export_lst_image(out, target_date, "LST_Single_Export")
 
@@ -289,7 +309,7 @@ def lst2():
 
         gcs_path = f"gs://{BUCKET}/{file_name}.tif"
         print(f"Proceso finalizado con exito: {gcs_path}")
-        return gcs_path, target_date, p2, p98
+        return gcs_path, target_date
 
     return None, None
 
