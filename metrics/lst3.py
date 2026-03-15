@@ -222,9 +222,6 @@ def export_lst_image(out, target_date, description_prefix):
     return task, file_name
 
 def lst3():
-    """
-    Download LST for the last 1 day using cascade: MODIS -> VIIRS -> GOES
-    """
     for i in range(7):
         # --- DATE RANGE: LAST 1 DAY ---
         target_date = datetime.date.today() - datetime.timedelta(days=i + 2)
@@ -295,11 +292,6 @@ def lst3():
             print(f"No hay píxeles válidos dentro del rango térmico para {target_date}.")
             continue
 
-        # out = prepare_output_with_nodata(out)
-
-        
-        # 4. Post-procesamiento
-        # out = post_process(img_final).clip(uruguay)
         
         is_valid_python = out.select("alpha").reduceRegion(
             reducer=ee.Reducer.sum(),
@@ -312,27 +304,6 @@ def lst3():
             print(f"No hay píxeles válidos dentro del rango térmico para {target_date}. Saltando...")
             continue
                 
-        """         stats = out.reduceRegion(
-            reducer=ee.Reducer.percentile([2, 98]),
-            geometry=uruguay,
-            scale=1000,
-            maxPixels=1e8
-        ).getInfo()
-         """
-        # if not stats or "LST_Celsius_p2" not in stats:
-        #     print(f"Advertencia: No se pudieron calcular percentiles para {target_date}. Píxeles insuficientes.")
-        #     # Puedes usar valores por defecto para el log o simplemente saltar
-        #     p2, p98 = 0, 50 
-        # else:
-        #     # p2 = stats["LST_Celsius_p2"]
-        #     # p98 = stats["LST_Celsius_p98"]
-        #     p2 = stats.get("LST_Celsius_p2", 15) # Valor por defecto si es None
-        #     p98 = stats.get("LST_Celsius_p98", 40)
-        #     print(f"Rango visual recomendado: min={p2:.2f}, max={p98:.2f}")
-
-        # out = reproject(out)
-        # lst = valid.select(["LST_Celsius", "alpha"])
-        # 5. Exportacion
         task, file_name = export_lst_image(out, target_date, "LST_Single_Export")
 
         print(f"Exportacion iniciada para {start_str}... esperando completion.")
