@@ -20,15 +20,27 @@ def process_and_export_rgb(target_date, is_single=False):
     end_str = str(target_date + datetime.timedelta(days=1))
     
     collection = (
-        ee.ImageCollection("MODIS/061/MYD09GA")
+        ee.ImageCollection("MODIS/061/MYD09GA")  # MODIS Aqua primero
         .filterDate(start_str, end_str)
         .filterBounds(uruguay)
-        .select(["sur_refl_b01", "sur_refl_b04", "sur_refl_b03"])
         .sort("system:time_start", False)
     )
+
+    source_name = "MODIS_AQUA"
     if collection.size().getInfo() == 0:
-        print(f"No hay imágenes RGB en catálogo para {start_str}")
-        return None
+        print(f"No MODIS Aqua para {start_str}, intentando VIIRS...")
+        
+        collection = (
+            ee.ImageCollection("NASA/VIIRS/002/VNP09GA")
+            .filterDate(start_str, end_str)
+            .filterBounds(uruguay)
+            .sort("system:time_start", False)
+        )
+        source_name = "VIIRS"
+        
+        if collection.size().getInfo() == 0:
+            print(f"No hay imágenes RGB en catálogo para {start_str}")
+            return None
 
     image = ee.Image(collection.first())
     actual_date_ms = image.get('system:time_start').getInfo()
@@ -43,22 +55,13 @@ def process_and_export_rgb(target_date, is_single=False):
     finally:
         wildfiresdb.close()
 
-    # # --- VALIDACIÓN DE PÍXELES VACÍOS ---
-    # # Contamos píxeles en la banda 1. Usamos una escala de 2000 para que sea rápido.
-    # pixel_count = image.clip(uruguay).reduceRegion(
-    #     reducer=ee.Reducer.count(),
-    #     geometry=uruguay,
-    #     scale=2000,
-    #     maxPixels=1e8
-    # ).values().get(0).getInfo()
-
-    # print(f"IMAGEN DETECTADA: Pedida={start_str} | Real Satélite={actual_date_str} | Píxeles={pixel_count}")
-    # if not pixel_count or pixel_count < 10: # Si hay menos de 10 píxeles, está vacío
-    #     print(f"SALTANDO: Imagen de {start_str} sin datos válidos (posibles nubes o fuera de órbita).")
-    #     return None
-
     # --- PROCESAMIENTO ---
-    rgb = image.multiply(0.0001).clip(uruguay)
+    if source_name == "MODIS_AQUA":
+        image = image.select(["sur_refl_b01", "sur_refl_b04", "sur_refl_b03"])  # R,G,B MODIS
+    else:  # VIIRS
+        image = image.select(["I1", "I2", "I3"]).multiply(0.0001)  # R,G,B VIIRS 500m
+
+    rgb = image.clip(uruguay)
 
     stats = rgb.reduceRegion(
     reducer=ee.Reducer.count(),
@@ -67,7 +70,7 @@ def process_and_export_rgb(target_date, is_single=False):
     maxPixels=1e13
     )
 
-    valid_pixels = ee.Number(stats.get("sur_refl_b01", 0))
+    valid_pixels = ee.Number(stats.get("I1" if source_name == "VIIRS" else "sur_refl_b01", 0))
     pixel_count = valid_pixels.getInfo() or 0
 
     if pixel_count is None or pixel_count < 100:

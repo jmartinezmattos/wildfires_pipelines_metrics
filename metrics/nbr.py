@@ -65,7 +65,7 @@ def _process_and_export_nbr(target_date):
     if source_name == 'MODIS':
         nbr_img = img.normalizedDifference(["sur_refl_b02", "sur_refl_b07"]).rename("NBR").clip(uruguay)
     else: # VIIRS
-        nbr_img = img.normalizedDifference(["I2", "M10"]).rename("NBR").clip(uruguay)
+        nbr_img = img.normalizedDifference(["I2", "M11"]).rename("NBR").clip(uruguay)
         nbr_img = nbr_img.multiply(0.0001) # Escalamos VIIRS
     stats = nbr_img.reduceRegion(
     reducer=ee.Reducer.count(),

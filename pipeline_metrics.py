@@ -1,5 +1,6 @@
 # from metrics.fwi import fwi
 from metrics.ndvi import ndvi
+from metrics.nbr import nbr
 from metrics.lst2 import lst2
 from metrics.lst3 import lst3
 from metrics.download_aqua import rgb
@@ -26,7 +27,6 @@ def pipeline_metrics():
             metric="FWI"
         )
 
-    
         
     ndvi_path, ndvi_date = ndvi()
     print("starting NDVI export...")
@@ -38,6 +38,18 @@ def pipeline_metrics():
             gcs_path=ndvi_path,
             acq_datetime=ndvi_date,
             metric="NDVI"
+        )
+        
+    nbr_path, nbr_date = nbr()
+    print("starting NBR export...")
+    if nbr_path:
+        gcs_paths.append(nbr_path)
+        print("NBR exported to:", nbr_path)
+        print("NBR date:", nbr_date)
+        wildfiresdb.insert_metric_register(
+            gcs_path=nbr_path,
+            acq_datetime=nbr_date,
+            metric="NBR"
         )
 
     aqua_rgb_path, aqua_rgb_date = rgb()

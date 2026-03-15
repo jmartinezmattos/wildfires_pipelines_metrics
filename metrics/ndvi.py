@@ -28,11 +28,26 @@ def _process_and_export_ndvi(target_date):
         .sort("system:time_start", False)
     )
 
+    source_name = 'MODIS'
     if col.size().getInfo() == 0:
-        print(f"No hay imágenes NDVI en catálogo para {start_str}")
-        return None
+        print(f"No hay imágenes NDVI de MODIS en catálogo para {start_str}, intentando con VIIRS...")
+        
+        # Si no hay MODIS, intentamos con VIIRS
+        col = (
+            ee.ImageCollection("NASA/VIIRS/002/VNP09GA")
+            .filterBounds(uruguay)
+            .filterDate(start_str, end_str)
+            .sort("system:time_start", False)
+        )
+        source_name = 'VIIRS'
+
+        if col.size().getInfo() == 0:
+            print(f"No hay imágenes MODIS ni VIIRS en catálogo para {start_str}")
+            return None
 
     img = ee.Image(col.first())
+    print(f"Source: {source_name}, Bands: {img.bandNames().getInfo()}")
+
     actual_date_timestamp = img.get('system:time_start').getInfo()
     actual_date = datetime.datetime.fromtimestamp(actual_date_timestamp / 1000.0).date()
     actual_date_str = actual_date.strftime('%Y%m%d')
@@ -48,8 +63,11 @@ def _process_and_export_ndvi(target_date):
 
 
     # 3. PROCESAMIENTO
-    ndvi_img = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(uruguay)
-
+    if source_name == 'MODIS':
+        ndvi_img = img.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI").clip(uruguay)
+    else: # VIIRS
+        ndvi_img = img.normalizedDifference(["I2", "I1"]).rename("NDVI").clip(uruguay)
+        ndvi_img = ndvi_img.multiply(0.0001) # Escalamos VIIRS
     stats = ndvi_img.reduceRegion(
     reducer=ee.Reducer.count(),
     geometry=uruguay,
