@@ -88,56 +88,6 @@ def add_valid_count(img):
     count = img.mask().rename("valid_count")
     return img.addBands(count)
 
-def merge_sources(img_terra, img_aqua, img_viirs):
-    """
-    Priority gap filling:
-    Terra (base) → Aqua fills → VIIRS fills
-    All images must already be scaled to Kelvin.
-    """
-    img_final = None
-    
-    # Priority: Terra first
-    if img_terra:
-        img_final = img_terra
-    
-    # Fill gaps with Aqua
-    if img_aqua:
-        if img_final:
-            img_final = img_final.unmask(img_aqua)
-        else:
-            img_final = img_aqua
-    
-    # Fill remaining gaps with VIIRS
-    if img_viirs:
-        if img_final:
-            img_final = img_final.unmask(img_viirs)
-        else:
-            img_final = img_viirs
-    
-    return img_final
-
-   
-    # if img_terra is None and img_aqua is None and img_viirs is None:
-    #     return None
-
-    # img_final = None
-
-    # if img_terra:
-    #     img_final = img_terra
-
-    # if img_aqua:
-    #     if img_final:
-    #         img_final = img_final.unmask(img_aqua)
-    #     else:
-    #         img_final = img_aqua
-
-    # if img_viirs:
-    #     if img_final:
-    #         img_final = img_final.unmask(img_viirs)
-    #     else:
-    #         img_final = img_viirs
-
-    # return img_final
 
 def has_valid_data(img, region):
     stats = img.reduceRegion(
