@@ -59,7 +59,7 @@ def process_and_export_rgb(target_date, is_single=False):
     if source_name == "MODIS_AQUA":
         image = image.select(["sur_refl_b01", "sur_refl_b04", "sur_refl_b03"]).multiply(0.0001) # R,G,B MODIS
     else:  # VIIRS
-        image = image.select(["I1", "I2", "I3"]).multiply(0.0001)  # R,G,B VIIRS 500m
+        image = image.select(["M5","M4","M3"]).multiply(0.0001)  # R,G,B VIIRS 500m
 
     rgb = image.clip(uruguay)
 
@@ -89,7 +89,6 @@ def process_and_export_rgb(target_date, is_single=False):
         bucket=BUCKET,
         fileNamePrefix=prefix,
         region=uruguay.bounds(),
-        #scale=500,
         scale=500,
         crs="EPSG:4326",
         fileFormat="GeoTIFF",
