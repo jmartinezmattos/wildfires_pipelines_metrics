@@ -57,7 +57,7 @@ def process_and_export_rgb(target_date, is_single=False):
 
     # --- PROCESAMIENTO ---
     if source_name == "MODIS_AQUA":
-        image = image.select(["sur_refl_b01", "sur_refl_b04", "sur_refl_b03"])  # R,G,B MODIS
+        image = image.select(["sur_refl_b01", "sur_refl_b04", "sur_refl_b03"]).multiply(0.0001) # R,G,B MODIS
     else:  # VIIRS
         image = image.select(["I1", "I2", "I3"]).multiply(0.0001)  # R,G,B VIIRS 500m
 
