@@ -9,11 +9,15 @@ import os
 PROJECT_ID = "wildfires-479718"
 REGION = "europe-west1"
 JOB_NAME = "wildfires-pipeline-metrics"
+#JOB_NAME = "wildfires-pipeline-batch-download"
+JOB_NAME = "wildfires-pipeline-inference-multiband"
+#JOB_NAME = "wildfires-pipeline-inference"
+JOB_NAME = "wildfires-pipeline-batch-region-no-gpu"
 
 # Precios aproximados Cloud Run (USD)
-CPU_PRICE = 0.000024      # por vCPU-segundo
-MEM_PRICE = 0.0000025     # por GB-segundo
-GPU_PRICE = 0.00011       # por GPU-segundo
+CPU_PRICE = 0.000018      # por vCPU-segundo
+MEM_PRICE = 0.000002     # por GB-segundo
+GPU_PRICE = 0.0001867       # por GPU-segundo
 
 # ==============================
 # PARSERS
