@@ -1,5 +1,6 @@
 from google.cloud import run_v2
 import pandas as pd
+import os
 
 # ==============================
 # CONFIG
@@ -12,8 +13,7 @@ JOB_NAME = "wildfires-pipeline-metrics"
 # Precios aproximados Cloud Run (USD)
 CPU_PRICE = 0.000024      # por vCPU-segundo
 MEM_PRICE = 0.0000025     # por GB-segundo
-
-#TODO agregar GPU para calcular el del pipeline inferences
+GPU_PRICE = 0.00011       # por GPU-segundo
 
 # ==============================
 # PARSERS
@@ -35,6 +35,13 @@ def parse_memory(memory_str):
     return 0.5  # fallback
 
 
+def parse_gpu(gpu_str):
+    """Convierte GPU a float"""
+    if gpu_str is None:
+        return 0
+    return float(gpu_str)
+
+
 # ==============================
 # OBTENER RECURSOS DEL JOB
 # ==============================
@@ -47,36 +54,43 @@ def get_job_resources(project_id, region, job_name):
 
     container = job.template.template.containers[0]
 
-    cpu_str = container.resources.limits.get("cpu", "1000m")
-    memory_str = container.resources.limits.get("memory", "512Mi")
+    limits = container.resources.limits
+
+    cpu_str = limits.get("cpu", "1000m")
+    memory_str = limits.get("memory", "512Mi")
+    gpu_str = limits.get("nvidia.com/gpu", "0")
 
     cpu = parse_cpu(cpu_str)
     memory_gb = parse_memory(memory_str)
+    gpu = parse_gpu(gpu_str)
 
     task_count = job.template.task_count or 1
 
-    return cpu, memory_gb, task_count
+    return cpu, memory_gb, gpu, task_count
 
 
 # ==============================
 # COSTO ESTIMADO
 # ==============================
 
-def estimate_cost(duration_seconds, cpu, memory_gb, task_count):
+def estimate_costs(duration_seconds, cpu, memory_gb, gpu, task_count):
     if duration_seconds is None:
-        return None
+        return None, None, None, None
 
-    total_cpu_cost = cpu * duration_seconds * CPU_PRICE * task_count
-    total_mem_cost = memory_gb * duration_seconds * MEM_PRICE * task_count
+    cost_cpu = cpu * duration_seconds * CPU_PRICE * task_count
+    cost_memory = memory_gb * duration_seconds * MEM_PRICE * task_count
+    cost_gpu = gpu * duration_seconds * GPU_PRICE * task_count
 
-    return total_cpu_cost + total_mem_cost
+    total_cost = cost_cpu + cost_memory + cost_gpu
+
+    return cost_cpu, cost_memory, cost_gpu, total_cost
 
 
 # ==============================
 # EJECUCIONES
 # ==============================
 
-def get_job_executions(project_id, region, job_name, cpu, memory_gb, task_count):
+def get_job_executions(project_id, region, job_name, cpu, memory_gb, gpu, task_count):
     client = run_v2.ExecutionsClient()
 
     parent = f"projects/{project_id}/locations/{region}/jobs/{job_name}"
@@ -97,7 +111,16 @@ def get_job_executions(project_id, region, job_name, cpu, memory_gb, task_count)
         if start_time and end_time:
             duration = (end_time - start_time).total_seconds()
 
-        estimated_cost = estimate_cost(duration, cpu, memory_gb, task_count)
+        cost_cpu, cost_memory, cost_gpu, total_cost = estimate_costs(
+            duration, cpu, memory_gb, gpu, task_count
+        )
+
+        # obtener args
+        try:
+            args = exec.template.template.containers[0].args
+            args_str = " ".join(args) if args else ""
+        except Exception:
+            args_str = ""
 
         data.append({
             "execution_id": exec_id,
@@ -106,8 +129,13 @@ def get_job_executions(project_id, region, job_name, cpu, memory_gb, task_count)
             "duration_seconds": duration,
             "cpu": cpu,
             "memory_gb": memory_gb,
+            "gpu": gpu,
             "task_count": task_count,
-            "estimated_cost_usd": estimated_cost
+            "args": args_str,
+            "cost_cpu": cost_cpu,
+            "cost_memory": cost_memory,
+            "cost_gpu": cost_gpu,
+            "estimated_cost_usd": total_cost
         })
 
     return pd.DataFrame(data)
@@ -120,15 +148,20 @@ def get_job_executions(project_id, region, job_name, cpu, memory_gb, task_count)
 def main():
     print("🔧 Obteniendo configuración del job...")
 
-    cpu, memory_gb, task_count = get_job_resources(PROJECT_ID, REGION, JOB_NAME)
+    cpu, memory_gb, gpu, task_count = get_job_resources(
+        PROJECT_ID, REGION, JOB_NAME
+    )
 
     print(f"CPU: {cpu}")
     print(f"Memoria (GB): {memory_gb}")
+    print(f"GPU: {gpu}")
     print(f"Task count: {task_count}")
 
     print("\n🔎 Obteniendo ejecuciones...")
 
-    df = get_job_executions(PROJECT_ID, REGION, JOB_NAME, cpu, memory_gb, task_count)
+    df = get_job_executions(
+        PROJECT_ID, REGION, JOB_NAME, cpu, memory_gb, gpu, task_count
+    )
 
     if df.empty:
         print("⚠️ No se encontraron ejecuciones")
@@ -138,7 +171,10 @@ def main():
     df = df.sort_values(by="start_time", ascending=False)
 
     # exportar CSV
-    output_file = f"cloud_run_jobs_with_estimated_cost_{JOB_NAME}.csv"
+    output_dir = "data/costs"
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_file = f"{output_dir}/cloud_run_jobs_with_estimated_cost_{JOB_NAME}.csv"
     df.to_csv(output_file, index=False)
 
     print(f"\n✅ CSV generado: {output_file}")
